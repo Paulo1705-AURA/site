@@ -1,1 +1,149 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Ping Pong do Paulo</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: #0f1a2b; color: #fff; font-family: system-ui, sans-serif; padding: 16px; gap: 12px;
+    touch-action: none;
+  }
+  h1 { font-size: 1.4rem; }
+  #placar { font-size: 1.3rem; font-weight: 700; letter-spacing: 1px; }
+  canvas {
+    width: 100%; max-width: 720px; aspect-ratio: 3 / 2;
+    background: #1e5aa8; border: 4px solid #fff; border-radius: 10px;
+  }
+  p { color: #aab8d0; font-size: .95rem; text-align: center; }
+  button {
+    background: #ff7a1a; color: #fff; border: none; padding: 10px 24px;
+    border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <h1>🏓 Ping Pong do Paulo</h1>
+  <div id="placar">Paulo 0 × 0 CPU</div>
+  <canvas id="c" width="600" height="400"></canvas>
+  <p>Mova o mouse (ou o dedo) para cima e para baixo, ou use as setas ↑ ↓. Primeiro a chegar a 11 vence!</p>
+  <button id="reiniciar">Reiniciar</button>
 
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const W = c.width, H = c.height;
+const PH = 80, PW = 10;
+
+let jogador, cpu, bola, pPaulo, pCpu, fim, teclas;
+
+function reiniciar() {
+  pPaulo = 0; pCpu = 0; fim = false;
+  jogador = { y: H / 2 - PH / 2 };
+  cpu = { y: H / 2 - PH / 2 };
+  teclas = {};
+  saque(1);
+  atualizarPlacar();
+}
+
+function saque(dir) {
+  const ang = (Math.random() - 0.5) * 0.8;
+  const v = 5;
+  bola = { x: W / 2, y: H / 2, vx: dir * v * Math.cos(ang), vy: v * Math.sin(ang), r: 8 };
+}
+
+function atualizarPlacar(msg) {
+  document.getElementById('placar').textContent =
+    msg || `Paulo ${pPaulo} × ${pCpu} CPU`;
+}
+
+function posY(e) {
+  const rect = c.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return (t.clientY - rect.top) * (H / rect.height);
+}
+c.addEventListener('mousemove', e => { jogador.y = posY(e) - PH / 2; });
+c.addEventListener('touchmove', e => { e.preventDefault(); jogador.y = posY(e) - PH / 2; }, { passive: false });
+window.addEventListener('keydown', e => { teclas[e.key] = true; });
+window.addEventListener('keyup', e => { teclas[e.key] = false; });
+document.getElementById('reiniciar').onclick = reiniciar;
+
+function atualizar() {
+  if (fim) return;
+  if (teclas['ArrowUp']) jogador.y -= 7;
+  if (teclas['ArrowDown']) jogador.y += 7;
+  jogador.y = Math.max(0, Math.min(H - PH, jogador.y));
+
+  // CPU segue a bola com velocidade limitada (dá pra ganhar!)
+  const alvo = bola.y - PH / 2;
+  const dif = alvo - cpu.y;
+  cpu.y += Math.max(-3.6, Math.min(3.6, dif));
+  cpu.y = Math.max(0, Math.min(H - PH, cpu.y));
+
+  bola.x += bola.vx;
+  bola.y += bola.vy;
+
+  if (bola.y < bola.r || bola.y > H - bola.r) {
+    bola.vy *= -1;
+    bola.y = Math.max(bola.r, Math.min(H - bola.r, bola.y));
+  }
+
+  // raquete do Paulo (esquerda)
+  if (bola.vx < 0 && bola.x - bola.r < 20 + PW && bola.x > 20 &&
+      bola.y > jogador.y && bola.y < jogador.y + PH) {
+    rebater(jogador, 1);
+  }
+  // raquete da CPU (direita)
+  if (bola.vx > 0 && bola.x + bola.r > W - 20 - PW && bola.x < W - 20 &&
+      bola.y > cpu.y && bola.y < cpu.y + PH) {
+    rebater(cpu, -1);
+  }
+
+  if (bola.x < 0) { pCpu++; ponto(1); }
+  if (bola.x > W) { pPaulo++; ponto(-1); }
+}
+
+function rebater(r, dir) {
+  const rel = (bola.y - (r.y + PH / 2)) / (PH / 2);
+  const vel = Math.min(Math.hypot(bola.vx, bola.vy) + 0.4, 11);
+  const ang = rel * 0.9;
+  bola.vx = dir * vel * Math.cos(ang);
+  bola.vy = vel * Math.sin(ang);
+}
+
+function ponto(dirSaque) {
+  atualizarPlacar();
+  if (pPaulo >= 11 || pCpu >= 11) {
+    fim = true;
+    atualizarPlacar(pPaulo > pCpu ? '🏆 Paulo venceu! ' + pPaulo + ' × ' + pCpu
+                                  : '😅 A CPU venceu ' + pCpu + ' × ' + pPaulo);
+    return;
+  }
+  saque(dirSaque);
+}
+
+function desenhar() {
+  ctx.clearRect(0, 0, W, H);
+  // rede
+  ctx.strokeStyle = 'rgba(255,255,255,.7)';
+  ctx.setLineDash([10, 10]); ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+  ctx.setLineDash([]);
+  // raquetes
+  ctx.fillStyle = '#ff3b3b';
+  ctx.fillRect(20, jogador.y, PW, PH);
+  ctx.fillStyle = '#111';
+  ctx.fillRect(W - 20 - PW, cpu.y, PW, PH);
+  // bola
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(bola.x, bola.y, bola.r, 0, Math.PI * 2); ctx.fill();
+}
+
+function loop() { atualizar(); desenhar(); requestAnimationFrame(loop); }
+reiniciar();
+loop();
+</script>
+</body>
+</html>
